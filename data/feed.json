@@ -1,68 +1,286 @@
 {
-  "schema": 1,
-  "updated_at": "2026-11-08T14:30:00Z",
-  "updated_by": "Initial snapshot, 8 Nov 2026",
-  "jet": {
-    "iata": {
-      "usd_bbl": 191.54,
-      "wow_pct": -2.6,
-      "period": "latest week (≈ w/e 30 Oct 2026)",
-      "retrieved": "2026-11-08",
-      "source": "IATA Jet Fuel Price Monitor (S&P Global Platts data)",
-      "url": "https://www.iata.org/en/publications/economics/fuel-monitor/"
-    },
-    "usgc": {
-      "usd_gal": 4.198,
-      "date": "2026-11-03",
-      "source": "U.S. EIA spot price via FRED (DJFUELUSGULF)",
-      "url": "https://fred.stlouisfed.org/series/DJFUELUSGULF"
-    }
+ "schema": 1,
+ "updated_at": "2026-11-10T21:18:49Z",
+ "updated_by": "GitHub Action",
+ "jet": {
+  "iata": {
+   "usd_bbl": 178.95,
+   "wow_pct": -6.6,
+   "period": "latest week (≈ w/e 6 Nov 2026)",
+   "retrieved": "2026-11-10",
+   "source": "IATA Jet Fuel Price Monitor (S&P Global Platts data)",
+   "url": "https://www.iata.org/en/publications/economics/fuel-monitor/"
   },
-  "carbon": {
-    "eua_eur_t": 90.16,
-    "date": "2026-11-04",
-    "label": "EUA Dec-26 futures settlement",
-    "source": "Investing.com (EEX contract)",
-    "url": "https://www.investing.com/commodities/european-union-allowance-eua-year-futures-historical-data"
-  },
-  "saf": {
-    "hefa_usd_t": 2788,
-    "period": "Q3 2026 average",
-    "source": "BloombergNEF, NW Europe SAF price",
-    "url": "https://www.bnef.com/insights/40591"
-  },
-  "fx": {
-    "usd_per_eur": 1.1165,
-    "gbp_per_eur": 0.83415,
-    "date": "2026-11-06",
-    "source": "ECB euro reference rates",
-    "url": "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/eurofxref-graph-usd.en.html"
-  },
-  "history": {
-    "usgc_monthly": [
-      ["2024-01", 2.585], ["2024-02", 2.683], ["2024-03", 2.593], ["2024-04", 2.605],
-      ["2024-05", 2.380], ["2024-06", 2.394], ["2024-07", 2.419], ["2024-08", 2.176],
-      ["2024-09", 1.982], ["2024-10", 2.068], ["2024-11", 2.065], ["2024-12", 2.097],
-      ["2025-01", 2.347], ["2025-02", 2.264], ["2025-03", 2.069], ["2025-04", 1.976],
-      ["2025-05", 1.928], ["2025-06", 2.094], ["2025-07", 2.244], ["2025-08", 2.024],
-      ["2025-09", 2.089], ["2025-10", 2.154], ["2025-11", 2.258], ["2025-12", 1.965],
-      ["2026-01", 2.031], ["2026-02", 2.262], ["2026-03", 3.697], ["2026-04", 3.928],
-      ["2026-05", 3.943], ["2026-06", 3.042], ["2026-07", 3.403], ["2026-08", 3.724],
-      ["2026-09", 4.388], ["2026-10", 4.483]
-    ],
-    "usgc_daily": [
-      ["2026-10-28", 4.474], ["2026-10-29", 4.436], ["2026-10-30", 4.379],
-      ["2026-11-02", 4.019], ["2026-11-03", 4.198]
-    ],
-    "iata_weekly": [
-      ["2026-01-30", 94.97, 0], ["2026-03-06", 157.41, 0], ["2026-03-13", 175.0, 0],
-      ["2026-03-20", 197.0, 0], ["2026-03-27", 195.19, 0], ["2026-04-03", 209.0, 0],
-      ["2026-09-25", 185.43, 0], ["2026-10-09", 190.18, 0],
-      ["2026-10-23", 196.70, 1], ["2026-10-30", 191.54, 1]
-    ],
-    "eua_daily": [
-      ["2026-10-29", 89.20], ["2026-10-30", 89.19], ["2026-11-02", 90.52],
-      ["2026-11-03", 89.93], ["2026-11-04", 90.16]
-    ]
+  "usgc": {
+   "usd_gal": 4.198,
+   "date": "2026-11-03",
+   "source": "U.S. EIA spot price via FRED (DJFUELUSGULF)",
+   "url": "https://fred.stlouisfed.org/series/DJFUELUSGULF"
   }
+ },
+ "carbon": {
+  "eua_eur_t": 87.65,
+  "date": "2026-11-10",
+  "label": "EUA Dec-26 futures settlement",
+  "source": "Investing.com (EEX contract)",
+  "url": "https://www.investing.com/commodities/european-union-allowance-eua-year-futures-historical-data"
+ },
+ "saf": {
+  "hefa_usd_t": 2788,
+  "period": "Q3 2026 average",
+  "source": "BloombergNEF, NW Europe SAF price",
+  "url": "https://www.bnef.com/insights/40591"
+ },
+ "fx": {
+  "usd_per_eur": 1.1214,
+  "gbp_per_eur": 0.83545,
+  "date": "2026-11-10",
+  "source": "ECB euro reference rates",
+  "url": "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/eurofxref-graph-usd.en.html"
+ },
+ "history": {
+  "usgc_monthly": [
+   [
+    "2024-01",
+    2.585
+   ],
+   [
+    "2024-02",
+    2.683
+   ],
+   [
+    "2024-03",
+    2.593
+   ],
+   [
+    "2024-04",
+    2.605
+   ],
+   [
+    "2024-05",
+    2.38
+   ],
+   [
+    "2024-06",
+    2.394
+   ],
+   [
+    "2024-07",
+    2.419
+   ],
+   [
+    "2024-08",
+    2.176
+   ],
+   [
+    "2024-09",
+    1.982
+   ],
+   [
+    "2024-10",
+    2.068
+   ],
+   [
+    "2024-11",
+    2.065
+   ],
+   [
+    "2024-12",
+    2.097
+   ],
+   [
+    "2025-01",
+    2.347
+   ],
+   [
+    "2025-02",
+    2.264
+   ],
+   [
+    "2025-03",
+    2.069
+   ],
+   [
+    "2025-04",
+    1.976
+   ],
+   [
+    "2025-05",
+    1.928
+   ],
+   [
+    "2025-06",
+    2.094
+   ],
+   [
+    "2025-07",
+    2.244
+   ],
+   [
+    "2025-08",
+    2.024
+   ],
+   [
+    "2025-09",
+    2.089
+   ],
+   [
+    "2025-10",
+    2.154
+   ],
+   [
+    "2025-11",
+    2.258
+   ],
+   [
+    "2025-12",
+    1.965
+   ],
+   [
+    "2026-01",
+    2.031
+   ],
+   [
+    "2026-02",
+    2.262
+   ],
+   [
+    "2026-03",
+    3.697
+   ],
+   [
+    "2026-04",
+    3.928
+   ],
+   [
+    "2026-05",
+    3.943
+   ],
+   [
+    "2026-06",
+    3.042
+   ],
+   [
+    "2026-07",
+    3.403
+   ],
+   [
+    "2026-08",
+    3.724
+   ],
+   [
+    "2026-09",
+    4.388
+   ],
+   [
+    "2026-10",
+    4.483
+   ]
+  ],
+  "usgc_daily": [
+   [
+    "2026-10-28",
+    4.474
+   ],
+   [
+    "2026-10-29",
+    4.436
+   ],
+   [
+    "2026-10-30",
+    4.379
+   ],
+   [
+    "2026-11-02",
+    4.019
+   ],
+   [
+    "2026-11-03",
+    4.198
+   ]
+  ],
+  "iata_weekly": [
+   [
+    "2026-01-30",
+    94.97,
+    0
+   ],
+   [
+    "2026-03-06",
+    157.41,
+    0
+   ],
+   [
+    "2026-03-13",
+    175.0,
+    0
+   ],
+   [
+    "2026-03-20",
+    197.0,
+    0
+   ],
+   [
+    "2026-03-27",
+    195.19,
+    0
+   ],
+   [
+    "2026-04-03",
+    209.0,
+    0
+   ],
+   [
+    "2026-09-25",
+    185.43,
+    0
+   ],
+   [
+    "2026-10-09",
+    190.18,
+    0
+   ],
+   [
+    "2026-10-23",
+    196.7,
+    1
+   ],
+   [
+    "2026-10-30",
+    191.54,
+    1
+   ],
+   [
+    "2026-11-06",
+    178.95,
+    1
+   ]
+  ],
+  "eua_daily": [
+   [
+    "2026-10-29",
+    89.2
+   ],
+   [
+    "2026-10-30",
+    89.19
+   ],
+   [
+    "2026-11-02",
+    90.52
+   ],
+   [
+    "2026-11-03",
+    89.93
+   ],
+   [
+    "2026-11-04",
+    90.16
+   ],
+   [
+    "2026-11-10",
+    87.65
+   ]
+  ]
+ }
 }
