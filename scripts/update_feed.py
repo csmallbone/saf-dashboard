@@ -8,134 +8,306 @@ and a warning is printed. Values in data/manual.json override the automatic ones
 (use it for the SAF price, and for the carbon price if the automatic quote fails).
 Standard library only.
 """
-import csv, io, json, re, sys, urllib.request
+
+from __future__ import annotations
+
+import csv
+import io
+import json
+import re
+import sys
+import urllib.request
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, Sequence
 
-ROOT = Path(__file__).resolve().parent.parent
-FEED = ROOT / "data" / "feed.json"
-MANUAL = ROOT / "data" / "manual.json"
-UA = {"User-Agent": "Mozilla/5.0 (compatible; saf-dashboard-price-updater)"}
-warnings = []
+SCRIPT_FILE: Path = Path(__file__).resolve()
+SCRIPTS_DIR: Path = SCRIPT_FILE.parent
+ROOT_DIR: Path = SCRIPTS_DIR.parent
+FEED_FILE: Path = ROOT_DIR.joinpath("data", "feed.json")
+MANUAL_OVERRIDES_FILE: Path = ROOT_DIR.joinpath("data", "manual.json")
+USER_AGENT: str = "Mozilla/5.0 (compatible; saf-dashboard-price-updater)"
 
-
-def get(url, timeout=30):
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read().decode("utf-8", "replace")
+FeedDict = dict[str, Any]
 
 
-def fred(series):
-    """[(date, value)] from FRED's public CSV download (no API key needed)."""
-    text = get(f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}")
-    rows = []
-    for row in csv.reader(io.StringIO(text)):
-        if len(row) < 2 or not re.match(r"\d{4}-\d{2}-\d{2}", row[0]):
-            continue
-        try:
-            rows.append((row[0], float(row[1])))
-        except ValueError:
-            pass  # '.' marks a missing day
-    return rows
+def serialize_json_value(obj: Any) -> Any:
+    if isinstance(obj, SeriesPoint):
+        return obj.to_list()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
-def ecb(currency):
-    url = (f"https://data-api.ecb.europa.eu/service/data/EXR/D.{currency}.EUR.SP00.A"
-           "?format=csvdata&lastNObservations=1")
-    rows = list(csv.DictReader(io.StringIO(get(url))))
-    return rows[-1]["TIME_PERIOD"], float(rows[-1]["OBS_VALUE"])
+def merge_series(
+    old_raw: Sequence[SeriesPoint | Sequence[Any]],
+    new_points: Sequence[SeriesPoint],
+    keep: int = 250,
+) -> list[SeriesPoint]:
+    merged: dict[str, SeriesPoint] = {}
+    for raw_item in old_raw:
+        point = SeriesPoint.from_raw(raw_item)
+        merged[point.period] = point
+    for point in new_points:
+        merged[point.period] = point
+
+    ordered: list[SeriesPoint] = []
+    for key in sorted(merged.keys()):
+        ordered.append(merged[key])
+    return ordered[-keep:]
 
 
-def merge_series(old, new, key_len=None, keep=250):
-    d = {p[0]: list(p) for p in old}
-    for p in new:
-        d[p[0]] = list(p)
-    out = [d[k] for k in sorted(d)]
-    return out[-keep:]
+def apply_manual_overrides(feed: FeedDict, overrides_file: Path) -> None:
+    """5. Apply manual overrides from data/manual.json if present."""
+    if not overrides_file.exists():
+        return
+
+    man: dict[str, Any] = json.loads(overrides_file.read_text(encoding="utf-8"))
+    history: dict[str, Any] = feed["history"]
+
+    saf: dict[str, Any] = man.get("saf") or {}
+    if isinstance(saf.get("hefa_usd_t"), (int, float)):
+        for key in ("hefa_usd_t", "period", "source", "url"):
+            if key in saf:
+                feed["saf"][key] = saf[key]
+
+    car: dict[str, Any] = man.get("carbon") or {}
+    if isinstance(car.get("eua_eur_t"), (int, float)):
+        if str(car.get("date", "")) >= str(feed["carbon"].get("date", "")):
+            for key in ("eua_eur_t", "date", "label", "source", "url"):
+                if key in car:
+                    feed["carbon"][key] = car[key]
+            override_point = SeriesPoint(
+                period=str(car["date"]), value=float(car["eua_eur_t"])
+            )
+            history["eua_daily"] = merge_series(
+                history.get("eua_daily", []),
+                [override_point],
+                keep=250,
+            )
 
 
-def main():
-    feed = json.loads(FEED.read_text(encoding="utf-8"))
-    h = feed.setdefault("history", {})
-    today = date.today().isoformat()
+@dataclass
+class SeriesPoint:
+    period: str
+    value: float
+    flag: int | None = None
 
-    # 1. IATA global average (weekly; the page shows no week date)
-    try:
-        page = re.sub(r"<[^>]+>", " ", get("https://www.iata.org/en/publications/economics/fuel-monitor/"))
+    @classmethod
+    def from_raw(cls, raw: SeriesPoint | Sequence[Any]) -> SeriesPoint:
+        if isinstance(raw, SeriesPoint):
+            return raw
+        flag: int | None = int(raw[2]) if len(raw) > 2 else None
+        return cls(period=str(raw[0]), value=float(raw[1]), flag=flag)
+
+    def to_list(self) -> list[str | float | int]:
+        if self.flag is not None:
+            return [self.period, self.value, self.flag]
+        return [self.period, self.value]
+
+
+class RemoteDataSource(ABC):
+    """Base class for remote price data sources."""
+
+    timeout: int = 30
+
+    def fetch_text(self, url: str) -> str:
+        headers: dict[str, str] = {"User-Agent": USER_AGENT}
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=self.timeout) as response:
+            raw_bytes: bytes = response.read()
+            return raw_bytes.decode("utf-8", "replace")
+
+    @abstractmethod
+    def update(self, feed: FeedDict, today: str) -> None:
+        """Fetch remote data and update the feed dictionary in-place."""
+
+
+class IataSource(RemoteDataSource):
+    """1. IATA global average jet fuel price (weekly)."""
+
+    url: str = "https://www.iata.org/en/publications/economics/fuel-monitor/"
+
+    def update(self, feed: FeedDict, today: str) -> None:
+        raw_html: str = self.fetch_text(self.url)
+        page: str = re.sub(r"<[^>]+>", " ", raw_html)
         page = re.sub(r"\s+", " ", page)
-        m = re.search(r"global average jet fuel price last week (rose|fell|increased|decreased|was unchanged)"
-                      r"\s*(?:by\s*)?([\d.]+)?\s*%?.*?\$\s?([\d,]+\.?\d*)\s*/\s*bbl", page, re.I)
-        if not m:
+
+        pattern: str = (
+            r"global average jet fuel price last week "
+            r"(rose|fell|increased|decreased|was unchanged)"
+            r"\s*(?:by\s*)?([\d.]+)?\s*%?.*?\$\s?([\d,]+\.?\d*)\s*/\s*bbl"
+        )
+        match: re.Match[str] | None = re.search(pattern, page, re.IGNORECASE)
+        if match is None:
             raise ValueError("price sentence not found")
-        val = float(m.group(3).replace(",", ""))
-        pct = float(m.group(2) or 0) * (-1 if m.group(1).lower() in ("fell", "decreased") else 1)
-        if not 20 <= val <= 600:
+
+        val: float = float(match.group(3).replace(",", ""))
+        raw_pct: str = match.group(2) or "0"
+        direction: str = match.group(1).lower()
+        sign: float = -1.0 if direction in ("fell", "decreased") else 1.0
+        pct: float = float(raw_pct) * sign
+
+        if not (20.0 <= val <= 600.0):
             raise ValueError(f"implausible {val}")
-        iata = feed["jet"]["iata"]
-        if abs(val - iata.get("usd_bbl", 0)) > 1e-6:
-            weeks = h.get("iata_weekly", [])
-            last = date.fromisoformat(weeks[-1][0]) if weeks else date.today() - timedelta(days=9)
-            wk = last + timedelta(days=7)
-            h["iata_weekly"] = merge_series(weeks, [[wk.isoformat(), val, 1]], keep=200)
+
+        iata: dict[str, Any] = feed["jet"]["iata"]
+        history: dict[str, Any] = feed["history"]
+
+        if abs(val - float(iata.get("usd_bbl", 0.0))) > 1e-6:
+            weeks: list[Sequence[Any]] = history.get("iata_weekly", [])
+            if weeks:
+                last_date: date = date.fromisoformat(str(weeks[-1][0]))
+            else:
+                last_date = date.today() - timedelta(days=9)
+            wk: date = last_date + timedelta(days=7)
+            new_point = SeriesPoint(period=wk.isoformat(), value=val, flag=1)
+            history["iata_weekly"] = merge_series(weeks, [new_point], keep=200)
             iata["period"] = f"latest week (≈ w/e {wk.day} {wk.strftime('%b %Y')})"
+
         iata.update(usd_bbl=val, wow_pct=pct, retrieved=today)
-    except Exception as e:  # noqa: BLE001
-        warnings.append(f"IATA: {e}")
 
-    # 2. EIA US Gulf Coast jet fuel spot, daily and monthly (via FRED)
-    try:
-        daily = [r for r in fred("DJFUELUSGULF") if 0.3 <= r[1] <= 15]
+
+class FredSource(RemoteDataSource):
+    """Shared base for FRED public CSV series."""
+
+    def fetch_series(self, series_id: str) -> list[SeriesPoint]:
+        url: str = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+        text: str = self.fetch_text(url)
+        points: list[SeriesPoint] = []
+        for row in csv.reader(io.StringIO(text)):
+            if len(row) < 2 or not re.match(r"\d{4}-\d{2}-\d{2}", row[0]):
+                continue
+            try:
+                points.append(SeriesPoint(period=row[0], value=float(row[1])))
+            except ValueError:
+                pass  # '.' marks a missing day
+        return points
+
+
+class FredDailySource(FredSource):
+    """2a. EIA US Gulf Coast jet fuel spot, daily (via FRED)."""
+
+    def update(self, feed: FeedDict, today: str) -> None:
+        daily: list[SeriesPoint] = []
+        for point in self.fetch_series("DJFUELUSGULF"):
+            if 0.3 <= point.value <= 15.0:
+                daily.append(point)
+
         if daily:
-            feed["jet"]["usgc"].update(date=daily[-1][0], usd_gal=daily[-1][1])
-            h["usgc_daily"] = merge_series(h.get("usgc_daily", []), [list(r) for r in daily[-120:]], keep=120)
-    except Exception as e:  # noqa: BLE001
-        warnings.append(f"FRED daily: {e}")
-    try:
-        monthly = [[r[0][:7], r[1]] for r in fred("MJFUELUSGULF") if r[0] >= "2024-01-01"]
+            latest: SeriesPoint = daily[-1]
+            feed["jet"]["usgc"].update(date=latest.period, usd_gal=latest.value)
+            history: dict[str, Any] = feed["history"]
+            history["usgc_daily"] = merge_series(
+                history.get("usgc_daily", []), daily[-120:], keep=120
+            )
+
+
+class FredMonthlySource(FredSource):
+    """2b. EIA US Gulf Coast jet fuel spot, monthly (via FRED)."""
+
+    def update(self, feed: FeedDict, today: str) -> None:
+        monthly: list[SeriesPoint] = []
+        for point in self.fetch_series("MJFUELUSGULF"):
+            if point.period >= "2024-01-01":
+                monthly.append(SeriesPoint(period=point.period[:7], value=point.value))
+
         if monthly:
-            h["usgc_monthly"] = merge_series(h.get("usgc_monthly", []), monthly, keep=240)
-    except Exception as e:  # noqa: BLE001
-        warnings.append(f"FRED monthly: {e}")
+            history: dict[str, Any] = feed["history"]
+            history["usgc_monthly"] = merge_series(
+                history.get("usgc_monthly", []), monthly, keep=240
+            )
 
-    # 3. ECB reference rates
-    try:
-        d1, usd = ecb("USD")
-        d2, gbp = ecb("GBP")
-        feed["fx"].update(usd_per_eur=usd, gbp_per_eur=gbp, date=max(d1, d2))
-    except Exception as e:  # noqa: BLE001
-        warnings.append(f"ECB: {e}")
 
-    # 4. EU ETS allowance (best effort; this site often blocks automated requests)
-    try:
-        page = get("https://www.investing.com/commodities/european-union-allowance-eua-year-futures")
-        m = re.search(r'data-test="instrument-price-last"[^>]*>\s*([\d.,]+)', page)
-        if not m:
+class EcbSource(RemoteDataSource):
+    """3. ECB euro reference rates."""
+
+    url: str = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
+
+    def update(self, feed: FeedDict, today: str) -> None:
+        xml_text: str = self.fetch_text(self.url)
+        time_match: re.Match[str] | None = re.search(
+            r"time=['\"](\d{4}-\d{2}-\d{2})['\"]", xml_text
+        )
+        if time_match is None:
+            raise ValueError("ECB reference date not found")
+
+        rates: dict[str, float] = {}
+        for match in re.finditer(
+            r"currency=['\"]([A-Z]{3})['\"]\s+rate=['\"]([\d.]+)['\"]", xml_text
+        ):
+            rates[match.group(1)] = float(match.group(2))
+
+        if "USD" not in rates or "GBP" not in rates:
+            raise ValueError("USD or GBP rate missing from ECB feed")
+
+        feed["fx"].update(
+            usd_per_eur=rates["USD"],
+            gbp_per_eur=rates["GBP"],
+            date=time_match.group(1),
+        )
+
+
+class InvestingEuaSource(RemoteDataSource):
+    """4. EU ETS allowance futures quote (best effort)."""
+
+    url: str = "https://www.investing.com/commodities/european-union-allowance-eua-year-futures"
+
+    def update(self, feed: FeedDict, today: str) -> None:
+        page: str = self.fetch_text(self.url)
+        match: re.Match[str] | None = re.search(
+            r'data-test="instrument-price-last"[^>]*>\s*([\d.,]+)', page
+        )
+        if match is None:
             raise ValueError("price not found")
-        val = float(m.group(1).replace(",", ""))
-        if not 20 <= val <= 300:
-            raise ValueError(f"implausible {val}")
-        feed["carbon"].update(eua_eur_t=val, date=today, source="Investing.com (EEX contract)")
-        h["eua_daily"] = merge_series(h.get("eua_daily", []), [[today, val]], keep=250)
-    except Exception as e:  # noqa: BLE001
-        warnings.append(f"EUA (set it in data/manual.json if this keeps failing): {e}")
 
-    # 5. Manual overrides
-    if MANUAL.exists():
-        man = json.loads(MANUAL.read_text(encoding="utf-8"))
-        saf = man.get("saf") or {}
-        if isinstance(saf.get("hefa_usd_t"), (int, float)):
-            feed["saf"].update({k: v for k, v in saf.items() if k in ("hefa_usd_t", "period", "source", "url")})
-        car = man.get("carbon") or {}
-        if isinstance(car.get("eua_eur_t"), (int, float)) and car.get("date", "") >= feed["carbon"].get("date", ""):
-            feed["carbon"].update({k: v for k, v in car.items() if k in ("eua_eur_t", "date", "label", "source", "url")})
-            h["eua_daily"] = merge_series(h.get("eua_daily", []), [[car["date"], car["eua_eur_t"]]], keep=250)
+        val: float = float(match.group(1).replace(",", ""))
+        if not (20.0 <= val <= 300.0):
+            raise ValueError(f"implausible {val}")
+
+        feed["carbon"].update(
+            eua_eur_t=val, date=today, source="Investing.com (EEX contract)"
+        )
+        history: dict[str, Any] = feed["history"]
+        history["eua_daily"] = merge_series(
+            history.get("eua_daily", []),
+            [SeriesPoint(period=today, value=val)],
+            keep=250,
+        )
+
+
+def main() -> None:
+    feed: FeedDict = json.loads(FEED_FILE.read_text(encoding="utf-8"))
+    feed.setdefault("history", {})
+    today: str = date.today().isoformat()
+
+    sources: list[RemoteDataSource] = [
+        IataSource(),
+        FredDailySource(),
+        FredMonthlySource(),
+        EcbSource(),
+        InvestingEuaSource(),
+    ]
+
+    for source in sources:
+        try:
+            source.update(feed, today)
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"::warning title={type(source).__name__}::{exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    apply_manual_overrides(feed, MANUAL_OVERRIDES_FILE)
 
     feed["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     feed["updated_by"] = "GitHub Action"
-    FEED.write_text(json.dumps(feed, ensure_ascii=False, indent=1), encoding="utf-8")
-    print("feed updated", feed["updated_at"])
-    for w in warnings:
-        print("WARNING", w, file=sys.stderr)
+    FEED_FILE.write_text(
+        json.dumps(feed, ensure_ascii=False, indent=1, default=serialize_json_value),
+        encoding="utf-8",
+    )
+    print("feed updated", feed["updated_at"], flush=True)
 
 
 if __name__ == "__main__":
