@@ -1,13 +1,13 @@
 {
  "schema": 1,
- "updated_at": "2026-11-11T15:39:35Z",
+ "updated_at": "2026-11-12T16:18:52Z",
  "updated_by": "GitHub Action",
  "jet": {
   "iata": {
    "usd_bbl": 178.95,
    "wow_pct": -6.6,
    "period": "latest week (≈ w/e 6 Nov 2026)",
-   "retrieved": "2026-11-11",
+   "retrieved": "2026-11-12",
    "source": "IATA Jet Fuel Price Monitor (S&P Global Platts data)",
    "url": "https://www.iata.org/en/publications/economics/fuel-monitor/"
   },
@@ -19,8 +19,8 @@
   }
  },
  "carbon": {
-  "eua_eur_t": 88.06,
-  "date": "2026-11-11",
+  "eua_eur_t": 89.56,
+  "date": "2026-11-12",
   "label": "EUA Dec-26 futures settlement",
   "source": "Investing.com (EEX contract)",
   "url": "https://www.investing.com/commodities/european-union-allowance-eua-year-futures-historical-data"
@@ -32,9 +32,9 @@
   "url": "https://www.bnef.com/insights/40591"
  },
  "fx": {
-  "usd_per_eur": 1.1165,
-  "gbp_per_eur": 0.83415,
-  "date": "2026-11-06",
+  "usd_per_eur": 1.1081,
+  "gbp_per_eur": 0.83595,
+  "date": "2026-11-12",
   "source": "ECB euro reference rates",
   "url": "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/eurofxref-graph-usd.en.html"
  },
@@ -280,6 +280,10 @@
    [
     "2026-11-11",
     88.06
+   ],
+   [
+    "2026-11-12",
+    89.56
    ]
   ]
  }
